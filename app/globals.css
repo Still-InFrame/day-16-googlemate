@@ -1,26 +1,114 @@
 @import "tailwindcss";
 
+/*
+  googlemate design system. Premium light SaaS look.
+  Brand = indigo/violet; neutrals = slate. Tokens exposed as Tailwind
+  color utilities via @theme inline so we can use e.g. bg-brand, text-ink.
+*/
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f7f8fa;
+  --surface: #ffffff;
+  --ink: #0f172a; /* slate-900 */
+  --ink-soft: #475569; /* slate-600 */
+  --ink-faint: #94a3b8; /* slate-400 */
+  --border: #e7e9ee;
+  --brand: #4f46e5; /* indigo-600 */
+  --brand-soft: #eef2ff; /* indigo-50 */
+  --brand-ink: #4338ca; /* indigo-700 */
 }
 
 @theme inline {
   --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-border: var(--border);
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-ink: var(--brand-ink);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--border);
 }
 
 body {
   background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--ink);
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Subtle, premium scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #d4d8e0;
+  border-radius: 9999px;
+  border: 2px solid var(--background);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #b9bfcb;
+}
+
+@keyframes gm-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.gm-fade-up {
+  animation: gm-fade-up 0.4s ease both;
+}
+
+@keyframes gm-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.gm-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: #eef0f4;
+}
+.gm-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.6),
+    transparent
+  );
+  animation: gm-shimmer 1.5s infinite;
+}
+
+@keyframes gm-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(400%);
+  }
+}
+.gm-indeterminate {
+  animation: gm-indeterminate 1.2s ease-in-out infinite;
+}
+
+html {
+  scroll-behavior: smooth;
 }
