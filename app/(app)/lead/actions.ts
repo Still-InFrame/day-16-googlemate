@@ -2,19 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser, getLead, getSettings, getBusinessInfo } from "@/lib/queries";
-import { runJson, runWebSearchJson, describeAiError } from "@/lib/ai";
-import { buildPitchPrompt, buildNapPrompt } from "@/lib/ai/prompts";
+import { runJson, describeAiError } from "@/lib/ai";
+import { buildPitchPrompt } from "@/lib/ai/prompts";
 import { buildWordCloud } from "@/lib/reviews";
 import { sanitizeCopy } from "@/lib/utils";
 import type { PlaceDetail } from "@/lib/google/places";
-import type {
-  AiProvider,
-  BusinessInfo,
-  Lead,
-  NapListing,
-  NapReport,
-  Sentiment,
-} from "@/lib/types";
+import type { AiProvider, BusinessInfo, Lead, Sentiment } from "@/lib/types";
 
 function detailFromLead(lead: Lead): PlaceDetail {
   return {
@@ -104,58 +97,6 @@ export async function reanalyzeLead(leadId: string): Promise<{ error?: string }>
         word_cloud: buildWordCloud(lead.reviews),
         pitch_email: sanitizeCopy(out.pitch_email) ?? null,
       })
-      .eq("id", leadId)
-      .eq("user_id", user.id);
-    if (error) return { error: error.message };
-
-    revalidatePath(`/lead/${leadId}`);
-    return {};
-  } catch (err) {
-    return { error: describeAiError(err) };
-  }
-}
-
-/** Check NAP (Name/Address/Phone) accuracy across directories via web search. */
-export async function checkNap(leadId: string): Promise<{ error?: string }> {
-  const [lead, settings] = await Promise.all([getLead(leadId), getSettings()]);
-  if (!lead) return { error: "Lead not found." };
-  if (!settings?.ai_api_key) return { error: "Add your AI API key in Settings first." };
-
-  const detail = detailFromLead(lead);
-
-  try {
-    const { system, prompt } = buildNapPrompt(detail);
-    const out = await runWebSearchJson<{
-      overall: { consistency_score: number; summary: string };
-      listings: NapListing[];
-    }>({
-      provider: settings.ai_provider as AiProvider,
-      apiKey: settings.ai_api_key,
-      model: settings.ai_model!,
-      system,
-      prompt,
-      maxTokens: 3000,
-    });
-
-    const listings = (out.listings ?? []).map((l) => ({
-      ...l,
-      notes: sanitizeCopy(l.notes) ?? null,
-    }));
-
-    const report: NapReport = {
-      canonical: { name: lead.name, address: lead.address, phone: lead.phone },
-      overall: {
-        consistency_score: Math.round(out.overall?.consistency_score ?? 0),
-        summary: sanitizeCopy(out.overall?.summary) ?? "",
-      },
-      listings,
-      checked_at: new Date().toISOString(),
-    };
-
-    const { user, supabase } = await requireUser();
-    const { error } = await supabase
-      .from("googlemate_leads")
-      .update({ nap: report })
       .eq("id", leadId)
       .eq("user_id", user.id);
     if (error) return { error: error.message };

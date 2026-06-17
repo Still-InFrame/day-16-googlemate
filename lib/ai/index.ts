@@ -159,6 +159,119 @@ export async function runWebSearchJson<T = unknown>({
   return extractJson<T>(raw);
 }
 
+/**
+ * Like runWebSearchJson, but streams progress: `onStatus` is called as the
+ * model issues each search query and gets results, so the UI can show live
+ * step-by-step activity. Anthropic surfaces real queries; OpenAI gets coarser
+ * stages (its Responses API web search isn't streamed here).
+ */
+export async function runWebSearchJsonStreaming<T = unknown>({
+  provider,
+  apiKey,
+  model,
+  system,
+  prompt,
+  maxTokens = 3000,
+  onStatus,
+}: RunArgs & { onStatus: (stage: string, message: string) => void }): Promise<T> {
+  const jsonSystem = `${system}\n\nWhen finished, respond with ONLY valid JSON, no markdown, no code fences, no commentary.`;
+
+  if (provider !== "anthropic") {
+    onStatus("search", "Searching directories across the web…");
+    const result = await runWebSearchJson<T>({ provider, apiKey, model, system, prompt, maxTokens });
+    onStatus("analyze", "Comparing listings to the Google profile…");
+    return result;
+  }
+
+  const client = new Anthropic({ apiKey });
+  const messages: Anthropic.MessageParam[] = [{ role: "user", content: prompt }];
+  let raw = "";
+
+  for (let round = 0; round < 3; round++) {
+    const stream = client.messages.stream({
+      model,
+      max_tokens: maxTokens,
+      system: jsonSystem,
+      tools: [
+        { type: "web_search_20260209", name: "web_search" },
+      ] as unknown as Anthropic.MessageCreateParams["tools"],
+      messages,
+    });
+
+    let toolInput = "";
+    let inSearch = false;
+    let analyzed = false;
+    let searchCount = 0;
+
+    for await (const event of stream) {
+      if (event.type === "content_block_start") {
+        const cb = event.content_block as {
+          type: string;
+          name?: string;
+          content?: unknown;
+        };
+        if (cb.type === "server_tool_use" && cb.name === "web_search") {
+          inSearch = true;
+          toolInput = "";
+        } else if (cb.type === "web_search_tool_result") {
+          const results = Array.isArray(cb.content) ? cb.content : [];
+          const domains = results
+            .map((r) => {
+              try {
+                return new URL((r as { url?: string }).url ?? "").hostname.replace(/^www\./, "");
+              } catch {
+                return "";
+              }
+            })
+            .filter(Boolean);
+          const uniq = [...new Set(domains)].slice(0, 3);
+          onStatus(
+            "results",
+            `Found ${results.length} result${results.length === 1 ? "" : "s"}${
+              uniq.length ? " — " + uniq.join(", ") : ""
+            }`,
+          );
+        } else if (cb.type === "text" && searchCount > 0 && !analyzed) {
+          analyzed = true;
+          onStatus("analyze", "Comparing each listing to the Google profile…");
+        }
+      } else if (event.type === "content_block_delta") {
+        const delta = event.delta as { type: string; partial_json?: string };
+        if (inSearch && delta.type === "input_json_delta") {
+          toolInput += delta.partial_json ?? "";
+        }
+      } else if (event.type === "content_block_stop") {
+        if (inSearch) {
+          inSearch = false;
+          searchCount++;
+          let q = "";
+          try {
+            q = (JSON.parse(toolInput) as { query?: string }).query ?? "";
+          } catch {
+            /* partial input, skip */
+          }
+          onStatus("search", q ? `Searching: “${q}”` : "Searching the web…");
+        }
+      }
+    }
+
+    const msg = await stream.finalMessage();
+    raw = msg.content
+      .filter((b): b is Anthropic.TextBlock => b.type === "text")
+      .map((b) => b.text)
+      .join("");
+
+    if (msg.stop_reason === "pause_turn") {
+      messages.push({ role: "assistant", content: msg.content });
+      onStatus("more", "Following up on more directories…");
+      continue;
+    }
+    break;
+  }
+
+  return extractJson<T>(raw);
+}
+
 function extractJson<T>(raw: string): T {
   const cleaned = raw.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
   try {
