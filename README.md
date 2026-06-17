@@ -1,5 +1,7 @@
 # googlemate
 
+**Live:** https://googlemate.100dayaichallenge.com
+
 A local-business lead-gen tool for agencies, freelancers, and anyone who sells
 services to local businesses. Search a location and niche, and googlemate finds
 businesses on Google, ranks the best-fit prospects through your own business
