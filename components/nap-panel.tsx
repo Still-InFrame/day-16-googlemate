@@ -16,6 +16,49 @@ function confidenceTone(c: number) {
   return "text-red-500";
 }
 
+const digits = (s: string | null) => (s ?? "").replace(/\D/g, "");
+const norm = (s: string | null) =>
+  (s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+/**
+ * Per-field status. Trust the model's value when present; otherwise compute it
+ * by comparing the listing value to the canonical Google value (older reports
+ * lack per-field data, and the overall verdict shouldn't be applied to a field
+ * that actually matches, e.g. a phone that is identical).
+ */
+function fieldStatus(
+  kind: "name" | "address" | "phone",
+  listing: string | null,
+  canonical: string | null,
+  fromModel?: NapFieldStatus,
+): NapFieldStatus {
+  if (fromModel) return fromModel;
+
+  if (kind === "phone") {
+    const a = digits(listing);
+    const b = digits(canonical);
+    if (!a) return "mismatch";
+    if (!b) return "match";
+    const last10 = (x: string) => (x.length > 10 ? x.slice(-10) : x);
+    return last10(a) === last10(b) ? "match" : "mismatch";
+  }
+
+  const a = norm(listing);
+  const b = norm(canonical);
+  if (!a) return "mismatch";
+  if (!b) return "minor";
+  if (a === b) return "match";
+  if (a.includes(b) || b.includes(a)) return "minor";
+  if (kind === "address") {
+    const numA = a.match(/\d+/)?.[0];
+    const numB = b.match(/\d+/)?.[0];
+    if (numA && numB && numA === numB) return "minor";
+  }
+  const at = new Set(a.split(" ").filter((t) => t.length > 2));
+  const overlap = b.split(" ").filter((t) => t.length > 2 && at.has(t)).length;
+  return overlap >= (kind === "address" ? 2 : 1) ? "minor" : "mismatch";
+}
+
 export function NapPanel({
   report,
   leadId,
@@ -86,9 +129,21 @@ export function NapPanel({
                     {/* Fields (left) + summary (right) */}
                     <div className="mt-3 grid gap-4 sm:grid-cols-2">
                       <div className="space-y-2.5">
-                        <NapField label="Name" value={l.name} status={l.name_match ?? l.match} />
-                        <NapField label="Address" value={l.address} status={l.address_match ?? l.match} />
-                        <NapField label="Phone" value={l.phone} status={l.phone_match ?? l.match} />
+                        <NapField
+                          label="Name"
+                          value={l.name}
+                          status={fieldStatus("name", l.name, report.canonical.name, l.name_match)}
+                        />
+                        <NapField
+                          label="Address"
+                          value={l.address}
+                          status={fieldStatus("address", l.address, report.canonical.address, l.address_match)}
+                        />
+                        <NapField
+                          label="Phone"
+                          value={l.phone}
+                          status={fieldStatus("phone", l.phone, report.canonical.phone, l.phone_match)}
+                        />
                       </div>
                       {l.notes && (
                         <p className="text-sm leading-relaxed text-ink-soft sm:border-l sm:border-border sm:pl-4">
