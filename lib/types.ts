@@ -52,13 +52,19 @@ export interface WordCloudItem {
   weight: number; // raw frequency
 }
 
+export type NapFieldStatus = "match" | "minor" | "mismatch";
+
 export interface NapListing {
   directory: string;
   url: string | null;
   name: string | null;
   address: string | null;
   phone: string | null;
-  match: "match" | "minor" | "mismatch";
+  match: NapFieldStatus; // overall (kept for older reports)
+  // Per-field comparison to the canonical Google listing.
+  name_match?: NapFieldStatus;
+  address_match?: NapFieldStatus;
+  phone_match?: NapFieldStatus;
   confidence: number; // 0-100, how confident this listing is actually theirs
   notes: string | null;
 }

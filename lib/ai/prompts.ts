@@ -208,8 +208,9 @@ Website: ${lead.website ?? "none"}
 
 Search the web and find this business's listings across major directories (for example Yelp, Yellow Pages, Better Business Bureau, Facebook, Bing Places, Apple Maps, Foursquare, Manta, Angi, Nextdoor, Chamber of Commerce). For each directory where you find what appears to be THIS business, read the listing and record the Name, Address, and Phone exactly as shown there.
 
-For each listing judge:
-- "match": "match" if the NAP matches the canonical, "minor" if there are only small differences (suite number, formatting, abbreviations, missing unit), "mismatch" if the name, address, or phone differ materially or are missing.
+For each listing judge each field separately against the canonical:
+- "name_match", "address_match", "phone_match": "match" if that field equals the canonical, "minor" if only a small difference (formatting, abbreviation, missing suite/unit, spelled-out vs abbreviated), "mismatch" if it differs materially or is missing/not listed.
+- "match": the overall verdict ("match" only if all three are match; "mismatch" if any field materially differs; otherwise "minor").
 - "confidence": 0 to 100, how confident you are this listing is actually THIS business and not a different one with a similar name, based on how well the name, address, phone, and city line up.
 
 Rules:
@@ -220,7 +221,7 @@ Return JSON exactly in this shape:
 {
   "overall": { "consistency_score": <0-100 how consistent the NAP is across the listings you found, 100 = perfectly consistent>, "summary": "<one or two plain sentences on the NAP consistency and any issues>" },
   "listings": [
-    { "directory": "<name>", "url": "<url>", "name": "<as listed>", "address": "<as listed>", "phone": "<as listed>", "match": "match|minor|mismatch", "confidence": <0-100>, "notes": "<short>" }
+    { "directory": "<name>", "url": "<url>", "name": "<as listed>", "address": "<as listed>", "phone": "<as listed>", "name_match": "match|minor|mismatch", "address_match": "match|minor|mismatch", "phone_match": "match|minor|mismatch", "match": "match|minor|mismatch", "confidence": <0-100>, "notes": "<short>" }
   ]
 }
 

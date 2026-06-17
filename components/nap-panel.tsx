@@ -1,17 +1,13 @@
 import { ExternalLink, Check, AlertTriangle, X } from "lucide-react";
-import type { NapReport, NapListing } from "@/lib/types";
+import type { NapReport, NapFieldStatus } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { NapCheck } from "@/components/nap-check-button";
 import { cn } from "@/lib/utils";
 
-const MATCH_META: Record<
-  NapListing["match"],
-  { label: string; tone: "green" | "amber" | "red"; Icon: typeof Check }
-> = {
-  match: { label: "Consistent", tone: "green", Icon: Check },
-  minor: { label: "Minor diff", tone: "amber", Icon: AlertTriangle },
-  mismatch: { label: "Mismatch", tone: "red", Icon: X },
+const FIELD_META: Record<NapFieldStatus, { Icon: typeof Check; color: string }> = {
+  match: { Icon: Check, color: "text-emerald-600" },
+  minor: { Icon: AlertTriangle, color: "text-amber-500" },
+  mismatch: { Icon: X, color: "text-red-500" },
 };
 
 function confidenceTone(c: number) {
@@ -62,54 +58,46 @@ export function NapPanel({
               </p>
             ) : (
               <ul className="space-y-3">
-                {report.listings.map((l, i) => {
-                  const meta = MATCH_META[l.match] ?? MATCH_META.mismatch;
-                  return (
-                    <li
-                      key={i}
-                      className="rounded-xl border border-border p-3.5"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          {l.url ? (
-                            <a
-                              href={l.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-1 font-medium text-ink hover:text-brand"
-                            >
-                              {l.directory}
-                              <ExternalLink className="h-3.5 w-3.5 text-ink-faint" />
-                            </a>
-                          ) : (
-                            <span className="font-medium text-ink">{l.directory}</span>
-                          )}
-                          <Badge tone={meta.tone}>
-                            <meta.Icon className="h-3 w-3" />
-                            {meta.label}
-                          </Badge>
-                        </div>
-                        <span
-                          className={cn(
-                            "text-xs font-semibold",
-                            confidenceTone(l.confidence),
-                          )}
-                          title="How confident this listing is theirs"
+                {report.listings.map((l, i) => (
+                  <li key={i} className="rounded-xl border border-border p-4">
+                    {/* Directory + confidence */}
+                    <div className="flex items-center justify-between gap-2">
+                      {l.url ? (
+                        <a
+                          href={l.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 font-semibold text-ink hover:text-brand"
                         >
-                          {l.confidence}% theirs
-                        </span>
-                      </div>
-                      <dl className="mt-2 grid gap-1 text-sm sm:grid-cols-3">
-                        <NapField label="Name" value={l.name} />
-                        <NapField label="Address" value={l.address} />
-                        <NapField label="Phone" value={l.phone} />
-                      </dl>
-                      {l.notes && (
-                        <p className="mt-2 text-xs text-ink-faint">{l.notes}</p>
+                          {l.directory}
+                          <ExternalLink className="h-3.5 w-3.5 text-ink-faint" />
+                        </a>
+                      ) : (
+                        <span className="font-semibold text-ink">{l.directory}</span>
                       )}
-                    </li>
-                  );
-                })}
+                      <span
+                        className={cn("text-xs font-semibold", confidenceTone(l.confidence))}
+                        title="How confident this listing is theirs"
+                      >
+                        {l.confidence}% theirs
+                      </span>
+                    </div>
+
+                    {/* Fields (left) + summary (right) */}
+                    <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2.5">
+                        <NapField label="Name" value={l.name} status={l.name_match ?? l.match} />
+                        <NapField label="Address" value={l.address} status={l.address_match ?? l.match} />
+                        <NapField label="Phone" value={l.phone} status={l.phone_match ?? l.match} />
+                      </div>
+                      {l.notes && (
+                        <p className="text-sm leading-relaxed text-ink-soft sm:border-l sm:border-border sm:pl-4">
+                          {l.notes}
+                        </p>
+                      )}
+                    </div>
+                  </li>
+                ))}
               </ul>
             )}
 
@@ -124,13 +112,25 @@ export function NapPanel({
   );
 }
 
-function NapField({ label, value }: { label: string; value: string | null }) {
+function NapField({
+  label,
+  value,
+  status,
+}: {
+  label: string;
+  value: string | null;
+  status: NapFieldStatus;
+}) {
+  const meta = FIELD_META[status] ?? FIELD_META.mismatch;
   return (
-    <div className="min-w-0">
-      <dt className="text-[11px] uppercase tracking-wide text-ink-faint">{label}</dt>
-      <dd className="truncate text-ink" title={value ?? undefined}>
-        {value || <span className="text-ink-faint">not listed</span>}
-      </dd>
+    <div className="flex items-start gap-2">
+      <meta.Icon className={cn("mt-0.5 h-4 w-4 shrink-0", meta.color)} />
+      <div className="min-w-0">
+        <div className="text-[11px] uppercase tracking-wide text-ink-faint">{label}</div>
+        <div className="break-words text-sm text-ink">
+          {value || <span className="text-ink-faint">not listed</span>}
+        </div>
+      </div>
     </div>
   );
 }
