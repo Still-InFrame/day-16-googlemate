@@ -18,9 +18,26 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
 
   const isSignup = mode === "signup";
+
+  async function signInWithGoogle() {
+    setGoogleLoading(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+      },
+    });
+    if (error) {
+      toast.error(error.message);
+      setGoogleLoading(false);
+    }
+    // On success the browser redirects to Google, so no further work here.
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -123,15 +140,12 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
 
       <button
         type="button"
-        disabled
-        title="Coming soon"
-        className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-border bg-surface px-5 py-2.5 text-sm font-medium text-ink-faint"
+        onClick={signInWithGoogle}
+        disabled={googleLoading}
+        className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-surface px-5 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
       >
         <GoogleIcon />
-        Continue with Google
-        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px]">
-          Soon
-        </span>
+        {googleLoading ? "Redirecting…" : "Continue with Google"}
       </button>
 
       <p className="mt-6 text-center text-sm text-ink-soft">

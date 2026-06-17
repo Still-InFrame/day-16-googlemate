@@ -35,7 +35,8 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   const isAuthRoute = pathname === "/login" || pathname === "/signup";
-  const isPublic = isAuthRoute || pathname === "/";
+  // /auth/* handles the OAuth code exchange and must be reachable while signed out.
+  const isPublic = isAuthRoute || pathname === "/" || pathname.startsWith("/auth");
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
