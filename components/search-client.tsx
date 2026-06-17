@@ -105,6 +105,15 @@ export function SearchClient({
           }
         }
       }
+
+      // The stream ended without a "done" event. This happens when the function
+      // hits Vercel's 60s limit during the pitch step, after the leads were
+      // already saved (we persist before pitching). Send the user to their
+      // results instead of leaving the loader spinning.
+      router.push("/top-hits");
+      toast.message(
+        "Scan ran long. Showing the leads saved so far, open a lead and tap Refresh insights for any missing pitch.",
+      );
     } catch (err) {
       setScanning(false);
       toast.error(err instanceof Error ? err.message : "Scan failed");

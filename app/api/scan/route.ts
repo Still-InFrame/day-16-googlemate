@@ -152,37 +152,16 @@ export async function POST(req: NextRequest) {
           }),
         );
 
-        // 6. Sentiment + pitch for each (in parallel); word cloud is computed locally.
-        status("pitch", "Analyzing reviews and writing tailored pitches...");
-        const withPitch = await Promise.all(
-          enriched.map(async (e) => {
-            const p = buildPitchPrompt(businessInfo, e.detail, e.email);
-            const wordCloud = buildWordCloud(e.detail.reviews);
-            try {
-              const out = await runJson<{
-                analysis: string;
-                sentiment: Sentiment;
-                pitch_email: string;
-              }>({ ...ai, system: p.system, prompt: p.prompt, maxTokens: 1500 });
-              const sentiment = out.sentiment
-                ? { ...out.sentiment, summary: sanitizeCopy(out.sentiment.summary) ?? "" }
-                : null;
-              return {
-                ...e,
-                wordCloud,
-                sentiment,
-                analysis: sanitizeCopy(out.analysis) ?? null,
-                pitch: sanitizeCopy(out.pitch_email) ?? null,
-              };
-            } catch {
-              return { ...e, wordCloud, sentiment: null, analysis: null, pitch: null };
-            }
-          }),
-        );
-
-        // 7. Persist leads: survivors (full) + tossed (basic, hidden)
+        // 6. Persist leads NOW, before the slow per-lead pitch generation. The
+        //    pitch step makes one AI call per survivor and can push the request
+        //    past Vercel's 60s function limit; if the save waited until after it
+        //    (as it used to), a timeout meant the function was killed before
+        //    anything was written and the scan showed no results. Saving first
+        //    means the leads always land, with full details + score + word cloud;
+        //    pitch/analysis/sentiment fill in next (or via "Refresh insights" on
+        //    the lead page if the function is cut short).
         status("save", "Saving your top hits...");
-        const rows = withPitch.map((e, i) => ({
+        const survivorRows = enriched.map((e, i) => ({
           search_id: searchId,
           user_id: user.id,
           place_id: e.detail.placeId,
@@ -200,13 +179,16 @@ export async function POST(req: NextRequest) {
           og_preview: e.og,
           ai_score: Math.round(e.score),
           ai_reason: e.reason,
-          ai_analysis: e.analysis,
-          sentiment: e.sentiment,
-          word_cloud: e.wordCloud,
-          pitch_email: e.pitch,
+          word_cloud: buildWordCloud(e.detail.reviews),
           kept: true,
           rank: i + 1,
         }));
+
+        const { data: insertedSurvivors, error: leadsErr } = await supabase
+          .from("googlemate_leads")
+          .insert(survivorRows)
+          .select("id, place_id");
+        if (leadsErr) throw new Error(leadsErr.message);
 
         const tossedRows = tossed.map((p) => ({
           search_id: searchId,
@@ -221,13 +203,48 @@ export async function POST(req: NextRequest) {
           kept: false,
           rank: null,
         }));
+        if (tossedRows.length) {
+          await supabase.from("googlemate_leads").insert(tossedRows);
+        }
 
-        const { error: leadsErr } = await supabase
-          .from("googlemate_leads")
-          .insert([...rows, ...tossedRows]);
-        if (leadsErr) throw new Error(leadsErr.message);
+        // 7. Write each survivor's pitch + analysis + sentiment and update its
+        //    row as it completes (best-effort). A lead whose pitch is cut off by
+        //    a timeout keeps its full profile and can be refreshed from its page.
+        const idByPlace = new Map(
+          (insertedSurvivors ?? []).map((r) => [r.place_id as string, r.id as string]),
+        );
+        status("pitch", "Analyzing reviews and writing tailored pitches...");
+        await Promise.all(
+          enriched.map(async (e) => {
+            const id = idByPlace.get(e.detail.placeId);
+            if (!id) return;
+            try {
+              const p = buildPitchPrompt(businessInfo, e.detail, e.email);
+              const out = await runJson<{
+                analysis: string;
+                sentiment: Sentiment;
+                pitch_email: string;
+              }>({ ...ai, system: p.system, prompt: p.prompt, maxTokens: 1500 });
+              const sentiment = out.sentiment
+                ? { ...out.sentiment, summary: sanitizeCopy(out.sentiment.summary) ?? "" }
+                : null;
+              await supabase
+                .from("googlemate_leads")
+                .update({
+                  ai_analysis: sanitizeCopy(out.analysis) ?? null,
+                  sentiment,
+                  pitch_email: sanitizeCopy(out.pitch_email) ?? null,
+                })
+                .eq("id", id)
+                .eq("user_id", user.id);
+            } catch {
+              // Leave insights pending; the lead is already saved and can be
+              // completed with "Refresh insights" on its page.
+            }
+          }),
+        );
 
-        send({ type: "done", searchId, leadCount: rows.length });
+        send({ type: "done", searchId, leadCount: survivorRows.length });
         controller.close();
       } catch (err) {
         send({ type: "error", message: describeAiError(err) });

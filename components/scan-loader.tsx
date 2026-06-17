@@ -8,8 +8,8 @@ export const SCAN_STEPS: { key: string; label: string }[] = [
   { key: "search", label: "Searching Google" },
   { key: "rank", label: "Ranking leads with AI" },
   { key: "details", label: "Pulling details & contacts" },
+  { key: "save", label: "Saving your leads" },
   { key: "pitch", label: "Writing your pitches" },
-  { key: "save", label: "Saving top hits" },
 ];
 
 export function ScanLoader({
