@@ -10,6 +10,13 @@ import type { PlaceReview } from "@/lib/types";
 const KEY = process.env.GOOGLE_PLACES_API_KEY;
 const BASE = "https://places.googleapis.com/v1";
 
+// The app key may be HTTP-referrer restricted (a browser-style restriction).
+// Server requests carry no Referer, so Google blocks them. We send an allowed
+// referer so a restricted key still works server-side. Best practice is still
+// to set the key's Application restriction to "None"; this makes either setup
+// work. Override the referer with GOOGLE_PLACES_REFERER if your allowlist differs.
+const REFERER = process.env.GOOGLE_PLACES_REFERER || "https://googlemate.100dayaichallenge.com";
+
 export interface PlaceLite {
   placeId: string;
   name: string;
@@ -92,6 +99,7 @@ export async function placesTextSearch(
       headers: {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": key,
+        Referer: REFERER,
         "X-Goog-FieldMask":
           "nextPageToken,places.id,places.displayName,places.rating,places.userRatingCount,places.websiteUri,places.formattedAddress,places.googleMapsUri",
       },
@@ -125,6 +133,7 @@ export async function placeDetails(placeId: string): Promise<PlaceDetail> {
   const res = await fetch(`${BASE}/places/${encodeURIComponent(placeId)}`, {
     headers: {
       "X-Goog-Api-Key": key,
+      Referer: REFERER,
       "X-Goog-FieldMask":
         "id,displayName,rating,userRatingCount,websiteUri,formattedAddress,googleMapsUri,nationalPhoneNumber,regularOpeningHours,reviews,photos",
     },
@@ -166,7 +175,7 @@ export async function fetchPlacePhoto(
 ): Promise<{ body: ArrayBuffer; contentType: string }> {
   const key = ensureKey();
   const url = `${BASE}/${photoName}/media?maxWidthPx=${maxWidthPx}&key=${key}`;
-  const res = await fetch(url, { redirect: "follow" });
+  const res = await fetch(url, { redirect: "follow", headers: { Referer: REFERER } });
   if (!res.ok) {
     throw new Error(`Places photo fetch failed (${res.status})`);
   }
